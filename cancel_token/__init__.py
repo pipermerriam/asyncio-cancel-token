@@ -1,8 +1,7 @@
-from .exceptions import (
+from .exceptions import (  # noqa: F401
     OperationCancelled,
     EventLoopMismatch,
 )
-from .token import (
+from .token import (  # noqa: F401
     CancelToken,
-    wait_with_token,
 )
