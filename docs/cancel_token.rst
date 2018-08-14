@@ -147,3 +147,99 @@ keyword argument.
     ...
     >>> loop.run_until_complete(token.cancellable_wait(some_3rd_party_api(), timeout=0.1))
     TimeoutError
+
+
+Usage across process boundaries
+-------------------------------
+
+Cancel tokens are also usable across process boundaries.  This is accomplished
+using the ``Manager`` API from the standard library ``multiprocessing`` module.
+
+In the main process where the cancel token is located, you will need to setup a
+subclass of the :class:`cancel_token.BaseCancelTokenManager` class, register
+the token and run the server.
+
+.. code-block:: python
+
+    >>> from cancel_token import BaseCancelTokenManager, CancelToken
+    >>> class TokenManager(BaseCancelTokenManager):
+    ...     pass
+    ...
+    >>> token = CancelToken('main')
+    >>> TokenManager.register(
+    ...     'get_cancel_token',
+    ...     callable=lambda: token,
+    ...     proxytype=CancelTokenProxy,
+    ... )
+    ...
+    >>> manager = TokenManager(address=('', 5001))  # bind to localhost:5000
+    >>> server = manager.get_server()
+    >>> server.serve_forever()
+
+.. note::
+
+    There is nothing special about the string ``'get_cancel_token'``.  It
+    merely defines the method that must be called on the ``CancelTokenClient``
+    to retrieve the proxy for this token.  You can use any method name you
+    want, or register multiple tokens under multiple methods.
+
+.. note:: 
+
+    See the ``multiprocessing`` documentation on Managers for more
+    information about binding to different types of addresses.
+
+.. note::
+
+    See the ``multiprocessing`` documentation on Managers for alternate ways
+    that the server can be run.
+
+With the server running you can now connect to it from another process as
+follows.
+
+
+.. code-block:: python
+
+    >>> manager = CancelTokenClient(manager_address)
+    >>> manager.connect()
+    >>> token = manager.get_cancel_token()
+
+
+.. note::
+
+    As noted above, the method ``CancelTokenClient.get_cancel_token`` is not
+    special, but merely defined by whatever string you use to register on you
+    ``TokenManager``.
+
+
+The proxy tokens returned by the :class:`cancel_token.CancelTokenClient` can be
+used in the same manner as regular :class:`cancel_token.CancelToken` instances
+with the following exceptions.
+
+
+Chaining
+~~~~~~~~
+
+Proxy tokens **can** be chained with other tokens but only as the token that is
+being chained with.
+
+This is ok!
+
+.. code-block:: python
+
+    >>> proxy_token = manager.get_cancel_token()
+    >>> other_token = CancelToken('local').chain(proxy_token)
+
+
+This will throw a ``NotImplementedError``.
+
+.. code-block:: python
+
+    >>> proxy_token = manager.get_cancel_token()
+    >>> other_token = CancelToken('local')
+    >>> proxy_token.chain(other_token)
+
+
+Pickling
+~~~~~~~~
+
+Proxy tokens cannot be pickled.
